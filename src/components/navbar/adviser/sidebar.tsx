@@ -152,22 +152,6 @@ export default function Sidebar({
 
 
           {/* =================================================
-              READING (scripts + assessment combined page)
-          ================================================== */}
-          {/* Monitoring */}
-          <li>
-            <NavLink
-              to="/adviser/monitoring"
-              title={collapsed ? "Monitoring" : undefined}
-              className={linkClass}
-            >
-              <i className="fa-solid fa-chart-pie w-4 text-center" />
-
-              {!collapsed && <span>Monitoring</span>}
-            </NavLink>
-          </li>
-
-          {/* =================================================
               ASSESSMENTS (module/other assessments, unchanged)
           ================================================== */}
           <li>

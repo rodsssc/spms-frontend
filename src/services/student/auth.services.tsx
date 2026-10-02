@@ -19,3 +19,7 @@ export const logout = async () => {
 export const getStudent = async () => {
     return api.get("/api/student/user");
 };
+
+export const getAssignedModules = async () => {
+    return api.get("/api/student/modules");
+};

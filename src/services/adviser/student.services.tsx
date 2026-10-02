@@ -45,6 +45,7 @@ export interface createStudentData {
 export interface StudentFilters {
     search?: string,
     status?: string,
+    performance_level?: "all" | "highly_confident" | "confident" | "developing" | "needs_improvement",
     section_id?: number,
     page?: number,
     per_page?: number,

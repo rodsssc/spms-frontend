@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login } from "../../services/adviser/auth.services"
+import { getUser, login } from "../../services/adviser/auth.services";
 import loginBackground from "../../assets/images/spms-login-bg.png";
 
 export default function Login() {
@@ -23,7 +23,8 @@ export default function Login() {
         try {
             await login(email, password);
 
-            navigate("/adviser/dashboard");
+            const { data: user } = await getUser();
+            navigate(user.role === "superadmin" ? "/superadmin/dashboard" : "/adviser/dashboard");
         } catch (err: any) {
             if (err.response?.status === 422) {
                 setError("Invalid email or password.");
@@ -38,21 +39,16 @@ export default function Login() {
     return (
         <div className="min-h-screen w-full grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] bg-white">
 
-            {/* =========================================
-                LEFT BRANDING PANEL
-            ========================================= */}
+            {/* LEFT BRANDING PANEL */}
             <div
                 className="relative hidden min-h-screen overflow-hidden bg-cover bg-center bg-no-repeat lg:flex lg:flex-col lg:justify-center p-20"
                 style={{
                     backgroundImage: `url(${loginBackground})`,
                 }}
             >
-                {/* Green overlay */}
                 <div className="absolute inset-0 z-0 bg-gradient-to-r from-emerald-950/95 via-emerald-700/80 to-emerald-700/10" />
 
-                {/* Branding content */}
                 <div className="relative z-10 max-w-[560px] text-white">
-
                     <h1 className="mb-5 text-[clamp(2.2rem,4vw,4rem)] font-bold leading-[1.08] tracking-tight">
                         Student Progress
                         <br />
@@ -66,7 +62,6 @@ export default function Login() {
                     </p>
                 </div>
 
-                {/* Branding footer */}
                 <div className="absolute bottom-8 left-20 right-20 z-10 flex items-center gap-2.5 text-xs text-white/70">
                     <span>SPMS</span>
                     <span>•</span>
@@ -76,9 +71,7 @@ export default function Login() {
                 </div>
             </div>
 
-            {/* =========================================
-                RIGHT LOGIN PANEL
-            ========================================= */}
+            {/* RIGHT LOGIN PANEL */}
             <div className="flex min-h-screen items-center justify-center bg-white px-5 py-8 sm:px-8 lg:px-16">
 
                 <div className="w-full max-w-[440px]">
@@ -123,9 +116,7 @@ export default function Login() {
                                 type="email"
                                 id="email"
                                 value={email}
-                                onChange={(e) =>
-                                    setEmail(e.target.value)
-                                }
+                                onChange={(e) => setEmail(e.target.value)}
                                 placeholder="you@example.com"
                                 autoComplete="email"
                                 required
@@ -146,9 +137,7 @@ export default function Login() {
                                 type="password"
                                 id="password"
                                 value={password}
-                                onChange={(e) =>
-                                    setPassword(e.target.value)
-                                }
+                                onChange={(e) => setPassword(e.target.value)}
                                 placeholder="••••••••"
                                 autoComplete="current-password"
                                 required
@@ -177,9 +166,7 @@ export default function Login() {
                             <a
                                 href="#"
                                 className="font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
-                                onClick={(e) =>
-                                    e.preventDefault()
-                                }
+                                onClick={(e) => e.preventDefault()}
                             >
                                 Forgot Password?
                             </a>
@@ -197,10 +184,7 @@ export default function Login() {
                                         className="loading loading-spinner loading-sm"
                                         aria-hidden="true"
                                     />
-
-                                    <span>
-                                        Signing In...
-                                    </span>
+                                    <span>Signing In...</span>
                                 </>
                             ) : (
                                 "Sign In"
@@ -208,19 +192,18 @@ export default function Login() {
                         </button>
                     </form>
 
-                    {/* Footer */}
+                    {/* Portal Links */}
                     <div className="mt-8 border-t border-slate-200 pt-6 text-center">
-                        <p className="text-sm text-slate-500">
-                            Don't have an account?{" "}
-
+                        <div className="mt-4">
                             <a
-                                href="/register"
-                                className="font-semibold text-emerald-700 hover:text-emerald-800 hover:underline"
+                                href="/student/login"
+                                className="text-sm font-semibold text-slate-600 hover:text-emerald-700 hover:underline"
                             >
-                                Create one
+                                Student Portal Login →
                             </a>
-                        </p>
+                        </div>
                     </div>
+
                 </div>
             </div>
         </div>

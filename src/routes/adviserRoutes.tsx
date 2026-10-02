@@ -9,7 +9,6 @@ import Module from "../pages/adviser/module";
 import ModuleDetail from "../pages/adviser/module_details";
 import Monitoring from "../pages/adviser/monitoring";
 import Assessment from "../pages/adviser/assesment";
-import AssessmentResult from "../pages/adviser/assessment_result";
 import ViewStudent from "../pages/adviser/view_student";
 
 export default function AdviserRoutes() {
@@ -24,7 +23,8 @@ export default function AdviserRoutes() {
                 <Route path="/adviser/module/:moduleId" element={<ModuleDetail />} />
                 <Route path="/adviser/monitoring" element={<Monitoring />} />
                 <Route path="/adviser/assessment" element={<Assessment />} />
-                <Route path="/adviser/assessment-result/:assesmentId" element={<AssessmentResult />} />
+                <Route path="/adviser/assessment-result/:assesmentId" element={<Assessment />} />
+                
             </Route>
         </Route>
     );

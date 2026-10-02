@@ -2,12 +2,21 @@ import { useRef, useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import Loading from "../../components/loading";
 import RadialProgress from "../../components/radial_progress";
-import { getAllSections, createSection } from "../../services/adviser/section.services";
+import { createSection, getAllSections } from "../../services/adviser/section.services";
 import type { Sections, SectionFilters } from "../../services/adviser/section.services";
 import { getSectionsWithStudents } from "../../services/adviser/student.services";
 import type { Students } from "../../services/adviser/student.services";
+import { getAllModules, getAllReadingScripts, getModuleStudents } from "../../services/adviser/module.services";
+import { getAssessments } from "../../services/adviser/assessment.services";
+import { calculateStudentPerformance, getPerformanceBadgeClass, type StudentPerformance } from "../../services/adviser/performance";
 
 const GRADE_LEVELS = ["Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"];
+
+interface SectionStudentProgress {
+    completedScripts: number;
+    totalScripts: number;
+    performance?: StudentPerformance;
+}
 
 export default function Section() {
     const addModalRef = useRef<HTMLDialogElement>(null);
@@ -41,6 +50,9 @@ export default function Section() {
     const [viewStudents, setViewStudents] = useState<Students[]>([]);
     const [studentsLoading, setStudentsLoading] = useState<boolean>(false);
     const [studentFetchProgress, setStudentFetchProgress] = useState<number>(0);
+    const [studentProgress, setStudentProgress] = useState<Map<number, SectionStudentProgress>>(new Map());
+    const [progressLoading, setProgressLoading] = useState<boolean>(false);
+    const [progressError, setProgressError] = useState(false);
 
     useEffect(() => {
         fetchSections();
@@ -119,6 +131,49 @@ export default function Section() {
         }
     };
 
+    const fetchSectionProgress = async (sectionId: number) => {
+        try {
+            setProgressLoading(true);
+            setProgressError(false);
+            const [modules, assessments] = await Promise.all([getAllModules(), getAssessments()]);
+            const assignedModules = modules.filter((module) => module.sections?.some((section) => section.id === sectionId));
+            const moduleData = await Promise.all(assignedModules.map(async (module) => {
+                const [scripts, moduleStudents] = await Promise.all([
+                    getAllReadingScripts(module.id),
+                    getModuleStudents(module.id, sectionId),
+                ]);
+                return { moduleId: module.id, scripts, students: moduleStudents };
+            }));
+
+            const progress = new Map<number, SectionStudentProgress>();
+            for (const item of moduleData) {
+                for (const student of item.students) {
+                    const current = progress.get(student.id) ?? { completedScripts: 0, totalScripts: 0 };
+                    current.totalScripts += item.scripts.length;
+                    current.completedScripts += item.scripts.filter((script) =>
+                        student.reading_scripts.find((assigned) => assigned.id === script.id)?.pivot.status === "completed"
+                    ).length;
+                    progress.set(student.id, current);
+                }
+            }
+
+            const moduleIds = new Set(assignedModules.map((module) => module.id));
+            const performanceByStudent = calculateStudentPerformance(assessments.filter((assessment) => moduleIds.has(assessment.module_id)));
+            performanceByStudent.forEach((performance) => {
+                const current = progress.get(performance.studentId) ?? { completedScripts: 0, totalScripts: 0 };
+                current.performance = performance;
+                progress.set(performance.studentId, current);
+            });
+            setStudentProgress(progress);
+        } catch (err: any) {
+            console.error(err);
+            setProgressError(true);
+            await Swal.fire({ icon: "error", title: "Unable to load student progress", text: "Please try again later." });
+        } finally {
+            setProgressLoading(false);
+        }
+    };
+
     const handleSearch = () => {
         fetchSections({
             search: searchTerm || undefined,
@@ -193,8 +248,11 @@ export default function Section() {
         setSelectedSection(section);
         setStudentSearch("");
         setViewStudents([]);
+        setStudentProgress(new Map());
+        setProgressError(false);
         viewModalRef.current?.showModal();
         fetchSectionStudents(section.id);
+        fetchSectionProgress(section.id);
     };
 
     return (
@@ -214,14 +272,6 @@ export default function Section() {
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={() => addModalRef.current?.showModal()}
-                            className="btn shrink-0 border-emerald-600 bg-emerald-600 px-3 text-white shadow-sm hover:border-emerald-700 hover:bg-emerald-700 sm:px-4"
-                        >
-                            <i className="fa-solid fa-plus"></i>
-                            <span className="hidden sm:inline">Add Section</span>
-                        </button>
                     </div>
 
                     {/* Search / Filter Toolbar */}
@@ -555,12 +605,14 @@ export default function Section() {
                         {/* Student Table — wired to SectionController@display_student */}
                         <div className="overflow-hidden rounded-lg border border-slate-200">
                             <div className="max-h-80 overflow-auto">
-                                <table className="w-full text-sm">
+                                        <table className="w-full min-w-[760px] text-sm">
                                     <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500">
                                         <tr>
                                             <th className="whitespace-nowrap px-4 py-3 text-left font-semibold">Student ID</th>
                                             <th className="whitespace-nowrap px-4 py-3 text-left font-semibold">Full Name</th>
                                             <th className="whitespace-nowrap px-4 py-3 text-left font-semibold">Gender</th>
+                                            <th className="whitespace-nowrap px-4 py-3 text-left font-semibold">Scripts Complete</th>
+                                            <th className="whitespace-nowrap px-4 py-3 text-left font-semibold">Performance</th>
                                             <th className="whitespace-nowrap px-4 py-3 text-left font-semibold">Status</th>
                                         </tr>
                                     </thead>
@@ -568,7 +620,7 @@ export default function Section() {
                                     <tbody className="divide-y divide-slate-100">
                                         {studentsLoading && (
                                             <tr>
-                                                <td colSpan={4} className="px-4 py-8">
+                                                <td colSpan={6} className="px-4 py-8">
                                                     <div className="flex flex-col items-center justify-center gap-2">
                                                         <RadialProgress
                                                             value={studentFetchProgress}
@@ -584,19 +636,28 @@ export default function Section() {
 
                                         {!studentsLoading && viewStudents.length === 0 && (
                                             <tr>
-                                                <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
+                                                <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
                                                     No students found.
                                                 </td>
                                             </tr>
                                         )}
 
-                                        {!studentsLoading && viewStudents.map((student) => (
-                                            <tr key={student.id} className="transition hover:bg-slate-50">
+                                        {!studentsLoading && viewStudents.map((student) => {
+                                            const progress = studentProgress.get(student.id);
+                                            const needsImprovement = progress?.performance?.performanceLevel === "Needs Improvement";
+                                            const allScriptsComplete = Boolean(progress && progress.totalScripts > 0 && progress.completedScripts === progress.totalScripts);
+                                            return <tr key={student.id} className={`transition hover:bg-slate-50 ${needsImprovement ? "bg-rose-50/40" : ""}`}>
                                                 <td className="whitespace-nowrap px-4 py-3 text-slate-500">{student.student_code}</td>
                                                 <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-700">
                                                     {student.first_name} {student.last_name}
                                                 </td>
                                                 <td className="whitespace-nowrap px-4 py-3 text-slate-500">{student.gender}</td>
+                                                <td className="whitespace-nowrap px-4 py-3">
+                                                    {progressLoading ? <span className="text-xs text-slate-400">Calculating…</span> : progressError ? <span className="text-xs text-slate-400">Unavailable</span> : !progress || progress.totalScripts === 0 ? <span className="text-xs text-slate-400">No scripts assigned</span> : <><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${allScriptsComplete ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>{allScriptsComplete ? "All complete" : "Incomplete"}</span><span className="mt-1 block text-xs text-slate-500">{progress.completedScripts}/{progress.totalScripts} scripts</span></>}
+                                                </td>
+                                                <td className="whitespace-nowrap px-4 py-3">
+                                                    {progressLoading ? <span className="text-xs text-slate-400">Calculating…</span> : progressError ? <span className="text-xs text-slate-400">Unavailable</span> : progress?.performance ? <><span className="font-semibold text-slate-700">{progress.performance.averageAccuracy}%</span><span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getPerformanceBadgeClass(progress.performance.performanceLevel)}`}>{progress.performance.performanceLevel}</span>{needsImprovement && <span className="mt-1 block text-xs font-medium text-rose-700">Follow-up recommended</span>}</> : <span className="text-xs text-slate-400">No assessment results</span>}
+                                                </td>
                                                 <td className="whitespace-nowrap px-4 py-3">
                                                     <span
                                                         className={`badge badge-outline ${
@@ -606,8 +667,8 @@ export default function Section() {
                                                         {student.status}
                                                     </span>
                                                 </td>
-                                            </tr>
-                                        ))}
+                                            </tr>;
+                                        })}
                                     </tbody>
                                 </table>
                             </div>

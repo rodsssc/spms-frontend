@@ -1,7 +1,6 @@
 import { Route, Navigate } from "react-router-dom";
 import AuthLayout from "../layout/authLayout";
 import Login from "../pages/auth/login";
-import Register from "../pages/auth/register";
 import { RequireGuest } from "./authGuards"
 
 
@@ -13,7 +12,6 @@ export default function AuthRoutes() {
         <Route element={<AuthLayout />}>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
         </Route>
       </Route>
 

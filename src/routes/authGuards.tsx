@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { getUser } from "../services/adviser/auth.services";
 
-type AuthenticationStatus = "checking" | "authenticated" | "unauthenticated";
+type AuthenticationStatus = "checking" | "adviser" | "superadmin" | "unauthenticated";
 
 function useAuthentication() {
     const [status, setStatus] = useState<AuthenticationStatus>("checking");
@@ -11,7 +11,7 @@ function useAuthentication() {
         let active = true;
 
         getUser()
-            .then(() => active && setStatus("authenticated"))
+            .then((response) => active && setStatus(response.data.role === "superadmin" ? "superadmin" : "adviser"))
             .catch(() => active && setStatus("unauthenticated"));
 
         return () => {
@@ -27,10 +27,15 @@ export function RequireAuth() {
     const location = useLocation();
 
     if (status === "checking") return null;
+    if (status === "unauthenticated") return <Navigate to="/login" replace state={{ from: location }} />;
+    return status === "adviser" ? <Outlet /> : <Navigate to="/superadmin/dashboard" replace />;
+}
 
-    return status === "authenticated"
-        ? <Outlet />
-        : <Navigate to="/login" replace state={{ from: location }} />;
+export function RequireSuperAdmin() {
+    const status = useAuthentication();
+    if (status === "checking") return null;
+    if (status === "unauthenticated") return <Navigate to="/login" replace />;
+    return status === "superadmin" ? <Outlet /> : <Navigate to="/adviser/dashboard" replace />;
 }
 
 export function RequireGuest() {
@@ -38,7 +43,7 @@ export function RequireGuest() {
 
     if (status === "checking") return null;
 
-    return status === "authenticated"
-        ? <Navigate to="/adviser/dashboard" replace />
-        : <Outlet />;
+    return status === "superadmin"
+        ? <Navigate to="/superadmin/dashboard" replace />
+        : status === "adviser" ? <Navigate to="/adviser/dashboard" replace /> : <Outlet />;
 }

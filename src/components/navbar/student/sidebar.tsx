@@ -112,32 +112,6 @@ export default function Sidebar({
 
         </ul>
 
-        {/* =====================================================
-            LEARNING
-        ====================================================== */}
-        {!collapsed && (
-          <p className="mb-2 mt-6 px-3 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/50">
-            Learning
-          </p>
-        )}
-
-        <ul className="flex flex-col gap-1">
-
-          {/* Progress */}
-          <li>
-            <NavLink
-              to="/student/progress"
-              title={collapsed ? "My Progress" : undefined}
-              className={linkClass}
-            >
-              <i className="fa-solid fa-chart-pie w-4 text-center" />
-
-              {!collapsed && <span>My Progress</span>}
-            </NavLink>
-          </li>
-
-        </ul>
-
       </nav>
     </aside>
   );

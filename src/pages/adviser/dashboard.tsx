@@ -1,329 +1,111 @@
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Pie, PieChart, Cell } from "recharts";
-import {
-    type ChartConfig,
-    ChartContainer,
-    ChartLegend,
-    ChartLegendContent,
-    ChartTooltip,
-    ChartTooltipContent,
-} from "../../../@/components/ui/chart";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "../../../@/components/ui/card";
+import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 
-/* =========================================================
-   TYPES
-========================================================= */
-interface StatCard {
-    label: string;
-    value: string;
-    subtext: string;
-    icon: string;
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../@/components/ui/card";
+import { type ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "../../../@/components/ui/chart";
+import RadialProgress from "../../components/radial_progress";
+import { getAssessments, type AdviserAssessment } from "../../services/adviser/assessment.services";
+import { calculateStudentPerformance, getPerformanceColor, PERFORMANCE_LEVELS } from "../../services/adviser/performance";
+import { getAllModules, type Module } from "../../services/adviser/module.services";
+import { getAllSections, type Sections } from "../../services/adviser/section.services";
+import { getAllStudents } from "../../services/adviser/student.services";
 
-interface ProgressPoint {
-    month: string;
-    avgWpm: number;
-}
-
-interface PerformanceSlice {
-    name: string;
-    value: number;
-    color: string;
-}
-
-interface StudentRow {
-    name: string;
-    studentId: string;
-    section: string;
-    assessment: string;
-    score: string;
-    date: string;
-    status: "Proficient" | "Developing" | "Needs Support";
-}
-
-/* =========================================================
-   MOCK DATA (static)
-   TODO: replace with real aggregates once the API is wired up.
-========================================================= */
-const STAT_CARDS: StatCard[] = [
-    { label: "Total Students", value: "482", subtext: "Across 12 sections", icon: "fa-solid fa-users" },
-    { label: "Average WPM", value: "76", subtext: "+4 from last month", icon: "fa-solid fa-gauge-high" },
-    { label: "Proficient Rate", value: "61%", subtext: "295 students", icon: "fa-solid fa-award" },
-    { label: "Needs Support", value: "58", subtext: "12% of students", icon: "fa-solid fa-triangle-exclamation" },
-];
-
-const PROGRESS_TREND: ProgressPoint[] = [
-    { month: "Mar", avgWpm: 58 },
-    { month: "Apr", avgWpm: 63 },
-    { month: "May", avgWpm: 65 },
-    { month: "Jun", avgWpm: 69 },
-    { month: "Jul", avgWpm: 72 },
-    { month: "Aug", avgWpm: 76 },
-];
-
-const PERFORMANCE_BREAKDOWN: PerformanceSlice[] = [
-    { name: "Proficient", value: 295, color: "#059669" },
-    { name: "Developing", value: 129, color: "#f59e0b" },
-    { name: "Needs Support", value: 58, color: "#ef4444" },
-];
-
-const STUDENT_ROWS: StudentRow[] = [
-    {
-        name: "Juan Dela Cruz",
-        studentId: "STU-001",
-        section: "Grade 3 - Rizal",
-        assessment: "Reading Fluency",
-        score: "85 WPM",
-        date: "Aug 20, 2026",
-        status: "Proficient",
-    },
-    {
-        name: "Maria Santos",
-        studentId: "STU-002",
-        section: "Grade 3 - Rizal",
-        assessment: "Reading Fluency",
-        score: "72 WPM",
-        date: "Aug 20, 2026",
-        status: "Developing",
-    },
-    {
-        name: "Pedro Garcia",
-        studentId: "STU-003",
-        section: "Grade 4 - Bonifacio",
-        assessment: "Reading Comprehension",
-        score: "88%",
-        date: "Aug 19, 2026",
-        status: "Proficient",
-    },
-    {
-        name: "Ana Reyes",
-        studentId: "STU-004",
-        section: "Grade 4 - Bonifacio",
-        assessment: "Reading Fluency",
-        score: "58 WPM",
-        date: "Aug 19, 2026",
-        status: "Needs Support",
-    },
-];
-
-/* =========================================================
-   CHART CONFIGS
-========================================================= */
-const progressChartConfig = {
-    avgWpm: {
-        label: "Avg WPM",
-        color: "#059669",
-    },
+const activityConfig = {
+    assessments: { label: "Assessments", color: "#047857" },
 } satisfies ChartConfig;
 
-const performanceChartConfig = {
-    Proficient: { label: "Proficient", color: "#059669" },
-    Developing: { label: "Developing", color: "#f59e0b" },
-    "Needs Support": { label: "Needs Support", color: "#ef4444" },
+const performanceConfig = {
+    students: { label: "Students", color: "#047857" },
 } satisfies ChartConfig;
 
-/* =========================================================
-   STATUS DISPLAY (Font Awesome only, no badges)
-========================================================= */
-const STATUS_STYLES: Record<StudentRow["status"], { icon: string; text: string }> = {
-    Proficient: { icon: "fa-solid fa-circle-check", text: "text-emerald-600" },
-    Developing: { icon: "fa-solid fa-triangle-exclamation", text: "text-amber-600" },
-    "Needs Support": { icon: "fa-solid fa-circle-exclamation", text: "text-red-600" },
-};
-
-/* =========================================================
-   PAGE
-========================================================= */
 export default function Dashboard() {
-    return (
-        <div className="min-h-screen w-full bg-slate-100 p-3 sm:p-4 lg:p-2">
-            <div className="mx-auto w-full max-w-7xl">
+    const [modules, setModules] = useState<Module[]>([]);
+    const [sections, setSections] = useState<Sections[]>([]);
+    const [studentCount, setStudentCount] = useState(0);
+    const [assessments, setAssessments] = useState<AdviserAssessment[]>([]);
+    const [assessmentsLoading, setAssessmentsLoading] = useState(true);
+    const [assessmentError, setAssessmentError] = useState("");
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState("");
 
-                {/* =====================================================
-                    STAT CARDS
-                ====================================================== */}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    {STAT_CARDS.map((stat) => (
-                        <Card
-                            key={stat.label}
-                            className="gap-2 border-t-4 border-emerald-800 py-4 shadow-sm"
-                        >
-                            <CardContent className="flex items-start justify-between px-5">
-                                <div>
-                                    <p className="text-xs font-medium text-slate-500">{stat.label}</p>
-                                    <p className="mt-1 text-2xl font-bold text-slate-800">{stat.value}</p>
-                                    <p className="mt-1 text-xs text-slate-400">{stat.subtext}</p>
-                                </div>
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
-                                    <i className={`${stat.icon} text-emerald-700`} />
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
+    useEffect(() => {
+        let isMounted = true;
+        Promise.all([getAllModules(), getAllSections(), getAllStudents({ per_page: 1 })])
+            .then(([moduleData, sectionData, studentData]) => {
+                if (!isMounted) return;
+                setModules(moduleData);
+                setSections(sectionData);
+                setStudentCount(studentData.total);
+            })
+            .catch(() => isMounted && setError("Unable to load dashboard data."))
+            .finally(() => isMounted && setIsLoading(false));
+        getAssessments()
+            .then((data) => isMounted && setAssessments(data))
+            .catch(() => isMounted && setAssessmentError("Assessment activity is unavailable."))
+            .finally(() => isMounted && setAssessmentsLoading(false));
+        return () => { isMounted = false; };
+    }, []);
 
-                {/* =====================================================
-                    STUDENT PROGRESS + READING PERFORMANCE
-                ====================================================== */}
-                <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[7fr_3fr]">
+    const scriptCount = modules.reduce((total, module) => total + (module.reading_scripts_count ?? 0), 0);
 
-                    {/* Student Progress */}
-                    <Card className="gap-4 border-t-2 border-t-emerald-800 py-4 shadow-sm sm:py-5">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold text-slate-700">
-                                Student Progress
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                                Average reading speed (WPM) trend over the last 6 months
-                            </CardDescription>
-                        </CardHeader>
+    const cards = [
+        { label: "Students", value: studentCount, detail: "Students in your records" },
+        { label: "Modules Added", value: modules.length, detail: "Modules you created" },
+        { label: "Sections", value: sections.length, detail: "Available class sections" },
+        { label: "Reading Scripts", value: scriptCount, detail: "Scripts across your modules" },
+    ];
 
-                        <CardContent>
-                            <ChartContainer config={progressChartConfig} className="h-72 w-full">
-                                <AreaChart
-                                    data={PROGRESS_TREND}
-                                    margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-                                >
-                                    <defs>
-                                        <linearGradient id="fillAvgWpm" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="var(--color-avgWpm)" stopOpacity={0.35} />
-                                            <stop offset="95%" stopColor="var(--color-avgWpm)" stopOpacity={0.02} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                                    <XAxis dataKey="month" />
-                                    <YAxis allowDecimals={false} />
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="avgWpm"
-                                        stroke="var(--color-avgWpm)"
-                                        strokeWidth={2}
-                                        fill="url(#fillAvgWpm)"
-                                    />
-                                </AreaChart>
-                            </ChartContainer>
-                        </CardContent>
-                    </Card>
+    const studentPerformance = useMemo(() => calculateStudentPerformance(assessments), [assessments]);
+    const performanceDistribution = useMemo(() => PERFORMANCE_LEVELS.map((level) => ({
+        level,
+        students: studentPerformance.filter((student) => student.performanceLevel === level).length,
+    })), [studentPerformance]);
 
-                    {/* Reading Performance */}
-                    <Card className="gap-4 border-t-2 border-t-emerald-800 py-4 shadow-sm sm:py-5">
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold text-slate-700">
-                                Reading Performance
-                            </CardTitle>
-                            <CardDescription className="text-xs">
-                                Student distribution by proficiency level
-                            </CardDescription>
-                        </CardHeader>
+    const assessmentActivity = useMemo(() => {
+        const days = Array.from({ length: 7 }, (_, index) => {
+            const date = new Date();
+            date.setHours(0, 0, 0, 0);
+            date.setDate(date.getDate() - (6 - index));
+            const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+            return { key, date, label: date.toLocaleDateString(undefined, { weekday: "short" }), assessments: 0 };
+        });
+        const byDay = new Map(days.map((day) => [day.key, day]));
+        assessments.forEach((assessment) => {
+            const date = new Date(assessment.created_at);
+            if (Number.isNaN(date.getTime())) return;
+            const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+            const day = byDay.get(key);
+            if (day) day.assessments += 1;
+        });
+        return days;
+    }, [assessments]);
 
-                        <CardContent className="flex flex-col items-center">
-                            <ChartContainer config={performanceChartConfig} className="h-52 w-full">
-                                <PieChart>
-                                    <ChartTooltip content={<ChartTooltipContent />} />
-                                    <Pie
-                                        data={PERFORMANCE_BREAKDOWN}
-                                        dataKey="value"
-                                        nameKey="name"
-                                        innerRadius={45}
-                                        outerRadius={75}
-                                        strokeWidth={2}
-                                    >
-                                        {PERFORMANCE_BREAKDOWN.map((slice) => (
-                                            <Cell key={slice.name} fill={slice.color} />
-                                        ))}
-                                    </Pie>
-                                </PieChart>
-                            </ChartContainer>
+    const moduleAccuracy = useMemo(() => {
+        const groups = new Map<number, { module: string; sum: number; count: number; latest: number }>();
+        assessments.forEach((assessment) => {
+            const group = groups.get(assessment.module_id) ?? { module: assessment.module, sum: 0, count: 0, latest: 0 };
+            group.sum += assessment.accuracy;
+            group.count += 1;
+            group.latest = Math.max(group.latest, new Date(assessment.created_at).getTime() || 0);
+            groups.set(assessment.module_id, group);
+        });
+        return Array.from(groups.values())
+            .sort((a, b) => b.latest - a.latest)
+            .slice(0, 6)
+            .map(({ module, sum, count }) => ({ module, accuracy: Math.round(sum / count), assessments: count }));
+    }, [assessments]);
 
-                            <div className="mt-2 w-full space-y-1.5">
-                                {PERFORMANCE_BREAKDOWN.map((slice) => (
-                                    <div key={slice.name} className="flex items-center justify-between text-xs">
-                                        <span className="flex items-center gap-1.5 text-slate-600">
-                                            <span
-                                                className="h-2 w-2 rounded-full"
-                                                style={{ backgroundColor: slice.color }}
-                                            />
-                                            {slice.name}
-                                        </span>
-                                        <span className="font-semibold text-slate-700">{slice.value}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                </div>
-
-                {/* =====================================================
-                    RECENT STUDENT PROGRESS TABLE
-                ====================================================== */}
-                <Card className="mt-5 gap-0 border-t-4 border-emerald-800 py-0 shadow-sm">
-                    <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
-                        <div>
-                            <h2 className="text-base font-semibold text-slate-800">
-                                Recent Student Progress
-                            </h2>
-                            <p className="text-xs text-slate-500">
-                                Latest student assessment records
-                            </p>
-                        </div>
-
-                        <button className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
-                            View All
-                            <i className="fa-solid fa-arrow-right text-[10px]" />
-                        </button>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-slate-200 text-xs text-slate-500">
-                                    <th className="px-6 py-3 font-medium">Student</th>
-                                    <th className="px-6 py-3 font-medium">Section</th>
-                                    <th className="px-6 py-3 font-medium">Assessment</th>
-                                    <th className="px-6 py-3 font-medium">Score</th>
-                                    <th className="px-6 py-3 font-medium">Date</th>
-                                    <th className="px-6 py-3 font-medium">Status</th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                {STUDENT_ROWS.map((student) => {
-                                    const status = STATUS_STYLES[student.status];
-                                    return (
-                                        <tr
-                                            key={student.studentId}
-                                            className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-                                        >
-                                            <td className="px-6 py-3">
-                                                <p className="font-medium text-slate-700">{student.name}</p>
-                                                <p className="text-xs text-slate-400">{student.studentId}</p>
-                                            </td>
-                                            <td className="px-6 py-3 text-slate-600">{student.section}</td>
-                                            <td className="px-6 py-3 text-slate-600">{student.assessment}</td>
-                                            <td className="px-6 py-3 font-medium text-slate-700">{student.score}</td>
-                                            <td className="px-6 py-3 text-slate-600">{student.date}</td>
-                                            <td className="px-6 py-3">
-                                                <span className={`flex items-center gap-1.5 font-medium ${status.text}`}>
-                                                    <i className={status.icon} />
-                                                    {student.status}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </Card>
-
-            </div>
+    return <div className="min-h-screen w-full bg-slate-100 p-3 sm:p-4 lg:p-2"><div className="mx-auto w-full max-w-7xl">
+        <div className="mb-5"><h1 className="text-2xl font-bold text-slate-800">Dashboard</h1><p className="mt-1 text-sm text-slate-500">A live overview of your students, modules, and sections.</p></div>
+        {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">{cards.map((card) => <Card key={card.label} className="border-t-4 border-emerald-800 py-4 shadow-sm"><CardContent className="px-5"><p className="text-xs font-medium text-slate-500">{card.label}</p><p className="mt-1 text-2xl font-bold text-slate-800">{isLoading ? "—" : card.value}</p><p className="mt-1 text-xs text-slate-400">{card.detail}</p></CardContent></Card>)}</div>
+        <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+            <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle className="text-base text-slate-700">Student Performance</CardTitle><CardDescription>Overview of student assessment performance based on their assessment results.</CardDescription></CardHeader><CardContent>{assessmentsLoading ? <div className="flex justify-center py-12"><span className="loading loading-spinner text-emerald-700" /></div> : assessmentError ? <p className="py-12 text-center text-sm text-slate-500">{assessmentError}</p> : studentPerformance.length === 0 ? <p className="py-12 text-center text-sm text-slate-500">No completed assessment results to summarize yet.</p> : <ChartContainer config={performanceConfig} className="h-64 w-full"><BarChart accessibilityLayer data={performanceDistribution} margin={{ left: 0, right: 12, bottom: 8 }}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="level" tickLine={false} axisLine={false} tickMargin={8} interval={0} tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} /><ChartTooltip content={<ChartTooltipContent />} /><Bar dataKey="students" radius={[5, 5, 0, 0]}>{performanceDistribution.map((item) => <Cell key={item.level} fill={getPerformanceColor(item.level)} />)}</Bar></BarChart></ChartContainer>}</CardContent></Card>
+            <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle className="text-base text-slate-700">Recent Modules</CardTitle><CardDescription>Your latest module records.</CardDescription></CardHeader><CardContent>{isLoading ? <div className="flex justify-center py-6"><RadialProgress value={55} size="sm" label="" /></div> : modules.length ? <div className="space-y-3">{modules.slice(0, 4).map((module) => <div key={module.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><p className="text-sm font-medium text-slate-700">{module.title}</p><p className="text-xs text-slate-500">{module.year_level} · {module.reading_scripts_count ?? 0} scripts</p></div>)}</div> : <p className="py-6 text-sm text-slate-500">No modules added yet.</p>}</CardContent></Card>
         </div>
-    );
+        <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle className="text-base text-slate-700">Assessment Activity</CardTitle><CardDescription>Submitted reading assessments over the last seven days.</CardDescription></CardHeader><CardContent>{assessmentsLoading ? <div className="flex justify-center py-12"><span className="loading loading-spinner text-emerald-700" /></div> : assessmentError ? <p className="py-12 text-center text-sm text-slate-500">{assessmentError}</p> : assessments.length === 0 ? <p className="py-12 text-center text-sm text-slate-500">No assessment results have been submitted yet.</p> : <ChartContainer config={activityConfig} className="h-64 w-full"><BarChart accessibilityLayer data={assessmentActivity} margin={{ left: 0, right: 12, bottom: 4 }}><CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} /><ChartTooltip content={<ChartTooltipContent />} /><Bar dataKey="assessments" fill="var(--color-assessments)" radius={[5, 5, 0, 0]} /></BarChart></ChartContainer>}</CardContent></Card>
+            <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle className="text-base text-slate-700">Average Accuracy by Module</CardTitle><CardDescription>Mean score from submitted assessment results, for recently active modules.</CardDescription></CardHeader><CardContent>{assessmentsLoading ? <div className="flex justify-center py-12"><span className="loading loading-spinner text-emerald-700" /></div> : assessmentError ? <p className="py-12 text-center text-sm text-slate-500">{assessmentError}</p> : moduleAccuracy.length === 0 ? <p className="py-12 text-center text-sm text-slate-500">No assessment results to summarize yet.</p> : <ChartContainer config={{ accuracy: { label: "Average accuracy", color: "#10b981" } }} className="h-64 w-full"><BarChart accessibilityLayer data={moduleAccuracy} layout="vertical" margin={{ left: 8, right: 16 }}><CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} tickLine={false} axisLine={false} /><YAxis type="category" dataKey="module" tickLine={false} axisLine={false} width={100} /><ChartTooltip content={<ChartTooltipContent formatter={(value) => `${value}%`} />} /><Bar dataKey="accuracy" fill="var(--color-accuracy)" radius={[0, 5, 5, 0]} /></BarChart></ChartContainer>}</CardContent></Card>
+        </div>
+    </div></div>;
 }

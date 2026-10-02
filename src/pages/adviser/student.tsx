@@ -9,9 +9,13 @@ import {
     updateStudent,
     deleteStudent,
 } from "../../services/adviser/student.services";
-import type { Students, Section, StudentFilters, createStudentData } from "../../services/adviser/student.services";
+import type { Students, Section, StudentFilters } from "../../services/adviser/student.services";
+import { getAssessments } from "../../services/adviser/assessment.services";
+import { calculateStudentPerformance, getPerformanceBadgeClass, getPerformanceLevel, type StudentPerformance } from "../../services/adviser/performance";
+import AssessmentResult from "./assessment_result";
 
 export default function Student() {
+    const canManage = false;
     const addModalRef = useRef<HTMLDialogElement>(null);
     const editModalRef = useRef<HTMLDialogElement>(null);
     const viewModalRef = useRef<HTMLDialogElement>(null);
@@ -32,6 +36,10 @@ export default function Student() {
 
     const [searchTerm, setSearchTerm] = useState<string>("");
     const [filterStatus, setFilterStatus] = useState<string>("all");
+    const [filterPerformance, setFilterPerformance] = useState<StudentFilters["performance_level"]>("all");
+    const [performanceByStudent, setPerformanceByStudent] = useState<Map<number, StudentPerformance>>(new Map());
+    const [performanceLoading, setPerformanceLoading] = useState(true);
+    const [performanceError, setPerformanceError] = useState(false);
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState<number>(1);
@@ -40,6 +48,7 @@ export default function Student() {
     const [perPage] = useState<number>(10);
 
     const [selectedStudent, setSelectedStudent] = useState<Students | null>(null);
+    const [selectedAssessmentId, setSelectedAssessmentId] = useState<number | null>(null);
     const [editingId, setEditingId] = useState<number | null>(null);
 
     // Shared form fields (used by both Add and Edit modals)
@@ -55,8 +64,21 @@ export default function Student() {
     const [guardianContact, setGuardianContact] = useState<string>("");
     const [status, setStatus] = useState<"active" | "inactive">("active");
 
+    const selectedPerformance = selectedStudent ? performanceByStudent.get(selectedStudent.id) : undefined;
+
     useEffect(() => {
         fetchSections();
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        getAssessments()
+            .then((records) => {
+                if (active) setPerformanceByStudent(new Map(calculateStudentPerformance(records).map((item) => [item.studentId, item])));
+            })
+            .catch(() => active && setPerformanceError(true))
+            .finally(() => active && setPerformanceLoading(false));
+        return () => { active = false; };
     }, []);
 
     // Animate the radial progress while a fetch is running
@@ -91,6 +113,7 @@ export default function Student() {
             const data = await getAllStudents({
                 page: currentPage,
                 per_page: perPage,
+                performance_level: filterPerformance,
                 ...filters,
             });
             setStudents(data.data);
@@ -136,6 +159,15 @@ export default function Student() {
             setCurrentPage(1);
         } else {
             fetchStudents({ search: searchTerm || undefined, status: value });
+        }
+    };
+
+    const handlePerformanceChange = (value: NonNullable<StudentFilters["performance_level"]>) => {
+        setFilterPerformance(value);
+        if (currentPage !== 1) {
+            setCurrentPage(1);
+        } else {
+            fetchStudents({ search: searchTerm || undefined, status: filterStatus, performance_level: value });
         }
     };
 
@@ -371,22 +403,18 @@ export default function Student() {
                                 Student Overview
                             </h1>
                             <p className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm">
-                                Manage and monitor student records
+                                View students assigned to your sections
                             </p>
                         </div>
 
-                        <button
-                            type="button"
-                            onClick={openAddModal}
-                            className="btn shrink-0 border-emerald-600 bg-emerald-600 px-3 text-white shadow-sm hover:border-emerald-700 hover:bg-emerald-700 sm:px-4"
-                        >
-                            <i className="fa-solid fa-plus"></i>
-                            <span className="hidden sm:inline">Add Student</span>
-                        </button>
+                        {canManage && <button type="button" onClick={openAddModal} className="btn shrink-0 border-emerald-600 bg-emerald-600 px-3 text-white shadow-sm hover:bg-emerald-700">
+                            <i className="fa-solid fa-plus"></i><span className="hidden sm:inline">Add Student</span>
+                        </button>}
+
                     </div>
 
                     {/* Search / Filter Toolbar */}
-                    <div className="flex w-full flex-col gap-2 sm:flex-row">
+                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
                         <div className="min-w-0 flex-1">
                             <label className="input input-bordered flex w-full items-center gap-2 bg-slate-50 focus-within:border-emerald-500 focus-within:outline-none">
                                 <i className="fa-solid fa-magnifying-glass shrink-0 text-sm text-slate-400"></i>
@@ -409,6 +437,19 @@ export default function Student() {
                             <option value="all">All Students</option>
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
+                        </select>
+
+                        <select
+                            aria-label="Filter students by performance"
+                            className="select select-bordered w-full bg-white sm:w-52"
+                            value={filterPerformance}
+                            onChange={(e) => handlePerformanceChange(e.target.value as NonNullable<StudentFilters["performance_level"]>)}
+                        >
+                            <option value="all">All Performance Levels</option>
+                            <option value="highly_confident">Highly Confident</option>
+                            <option value="confident">Confident</option>
+                            <option value="developing">Developing</option>
+                            <option value="needs_improvement">Needs Improvement</option>
                         </select>
 
                         <button
@@ -446,13 +487,14 @@ export default function Student() {
                     </div>
 
                     <div className="w-full overflow-x-auto">
-                        <table className="w-full min-w-[850px] text-sm">
+                        <table className="w-full min-w-[1000px] text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 bg-slate-50 text-left">
                                     <th className="px-4 py-3 font-semibold text-slate-600">Student ID</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Full Name</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Grade</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Section</th>
+                                    <th className="px-4 py-3 font-semibold text-slate-600">Performance</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Address</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Status</th>
                                     <th className="w-16 px-4 py-3 text-center font-semibold text-slate-600">Actions</th>
@@ -462,7 +504,7 @@ export default function Student() {
                             <tbody className="divide-y divide-slate-100">
                                 {loading && (
                                     <tr>
-                                        <td colSpan={7} className="px-4 py-8">
+                                        <td colSpan={8} className="px-4 py-8">
                                             <div className="flex flex-col items-center justify-center gap-2">
                                                 <RadialProgress
                                                     value={fetchProgress}
@@ -478,14 +520,14 @@ export default function Student() {
 
                                 {!loading && !error && students.length === 0 && (
                                     <tr>
-                                        <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                                        <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
                                             No students found.
                                         </td>
                                     </tr>
                                 )}
 
                                 {!loading && students.map((student) => (
-                                    <tr key={student.id} className="transition-colors hover:bg-slate-50">
+                                    <tr key={student.id} className={`transition-colors hover:bg-slate-50 ${performanceByStudent.get(student.id)?.performanceLevel === "Needs Improvement" ? "border-l-4 border-l-rose-500 bg-rose-50/40" : ""}`}>
                                         <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-600">
                                             {student.student_code}
                                         </td>
@@ -502,6 +544,10 @@ export default function Student() {
 
                                         <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                                             {student.section.section_name}
+                                        </td>
+
+                                        <td className="whitespace-nowrap px-4 py-3">
+                                            {performanceLoading ? <span className="text-xs text-slate-400">Loading results…</span> : performanceError ? <span className="text-xs text-slate-400">Unavailable</span> : performanceByStudent.has(student.id) ? <><span className="font-semibold text-slate-700">{performanceByStudent.get(student.id)?.averageAccuracy}%</span><span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getPerformanceBadgeClass(performanceByStudent.get(student.id)!.performanceLevel)}`}>{performanceByStudent.get(student.id)?.performanceLevel}</span>{performanceByStudent.get(student.id)?.performanceLevel === "Needs Improvement" && <span className="mt-1 block text-xs font-medium text-rose-700">Follow-up recommended</span>}</> : <span className="text-xs text-slate-400">No results</span>}
                                         </td>
 
                                         <td className="px-4 py-3 text-slate-500">
@@ -541,23 +587,9 @@ export default function Student() {
                                                         </button>
                                                     </li>
 
-                                                    <li>
-                                                        <button type="button" onClick={() => openEditModal(student)}>
-                                                            <i className="fa-solid fa-pen w-4"></i>
-                                                            Edit
-                                                        </button>
-                                                    </li>
+                                                    {canManage && <li><button type="button" onClick={() => openEditModal(student)}><i className="fa-solid fa-pen w-4"></i>Edit</button></li>}
+                                                    {canManage && <li><button type="button" className="text-red-600 hover:bg-red-50" onClick={() => handleDeleteStudent(student)}><i className="fa-solid fa-trash w-4"></i>Delete</button></li>}
 
-                                                    <li>
-                                                        <button
-                                                            type="button"
-                                                            className="text-red-600 hover:bg-red-50"
-                                                            onClick={() => handleDeleteStudent(student)}
-                                                        >
-                                                            <i className="fa-solid fa-trash w-4"></i>
-                                                            Delete
-                                                        </button>
-                                                    </li>
                                                 </ul>
                                             </div>
                                         </td>
@@ -876,7 +908,7 @@ export default function Student() {
 
             {/* View Student Modal */}
             <dialog ref={viewModalRef} className="modal">
-                <div className="modal-box w-11/12 max-w-4xl p-0 rounded-xl border-t-5 border-emerald-800 bg-white shadow-sm">
+                <div className="modal-box w-11/12 max-h-[90vh] max-w-4xl overflow-y-auto p-0 rounded-xl border-t-5 border-emerald-800 bg-white shadow-sm">
                     <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
                         <div>
                             <h3 className="text-lg font-bold text-slate-800">Student Details</h3>
@@ -968,6 +1000,43 @@ export default function Student() {
                                 </div>
                             </div>
                         </div>
+
+                        <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+                            <div className="border-b border-slate-200 px-4 py-2.5">
+                                <h4 className="text-sm font-semibold text-slate-700">Student Performance Summary</h4>
+                                <p className="mt-0.5 text-xs text-slate-500">Calculated from this student’s completed assessment results.</p>
+                            </div>
+                            <div className="p-4">
+                                {performanceLoading ? <div className="flex justify-center py-6"><span className="loading loading-spinner loading-sm text-emerald-700" /></div>
+                                    : performanceError ? <p className="py-4 text-sm text-slate-500">Assessment results are unavailable.</p>
+                                    : selectedPerformance ? <>
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[11px] font-medium text-slate-500">Average Accuracy</p><p className="mt-1 text-xl font-bold text-slate-800">{selectedPerformance.averageAccuracy}%</p></div>
+                                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[11px] font-medium text-slate-500">Performance Level</p><span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getPerformanceBadgeClass(selectedPerformance.performanceLevel)}`}>{selectedPerformance.performanceLevel}</span></div>
+                                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[11px] font-medium text-slate-500">Completed Assessments</p><p className="mt-1 text-xl font-bold text-slate-800">{selectedPerformance.assessmentCount}</p></div>
+                                            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="text-[11px] font-medium text-slate-500">Correct Words</p><p className="mt-1 text-xl font-bold text-slate-800">{selectedPerformance.assessments.reduce((total, assessment) => total + assessment.correct_words, 0)} <span className="text-sm font-medium text-slate-400">/ {selectedPerformance.assessments.reduce((total, assessment) => total + assessment.total_words, 0)}</span></p></div>
+                                        </div>
+                                        {selectedPerformance.performanceLevel === "Needs Improvement" && <p role="status" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"><i className="fa-solid fa-triangle-exclamation mr-1.5" />This student may benefit from additional reading support.</p>}
+                                    </> : <p className="py-4 text-sm text-slate-500">No completed assessment results are available for this student yet.</p>}
+                            </div>
+                        </div>
+
+                        <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-2.5">
+                                <div><h4 className="text-sm font-semibold text-slate-700">Reading Script Results</h4><p className="mt-0.5 text-xs text-slate-500">Scores and submission dates by module.</p></div>
+                                {selectedPerformance && <span className="text-xs text-slate-500">{selectedPerformance.assessmentCount} results</span>}
+                            </div>
+                            {performanceLoading ? <div className="flex justify-center py-8"><span className="loading loading-spinner loading-sm text-emerald-700" /></div>
+                                : performanceError ? <p className="px-4 py-6 text-sm text-slate-500">Assessment results are unavailable.</p>
+                                : selectedPerformance?.assessments.length ? <div className="max-h-64 divide-y divide-slate-100 overflow-y-auto">{selectedPerformance.assessments.map((assessment) => {
+                                    const level = getPerformanceLevel(assessment.accuracy);
+                                    const submittedAt = new Date(assessment.created_at);
+                                    return <div key={assessment.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="min-w-0"><p className="truncate text-sm font-medium text-slate-700">{assessment.script_title}</p><p className="mt-0.5 text-xs text-slate-500">{assessment.module} · {submittedAt.toLocaleDateString()} at {submittedAt.toLocaleTimeString()}</p></div>
+                                        <div className="flex items-center justify-between gap-3 sm:justify-end"><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getPerformanceBadgeClass(level)}`}>{assessment.accuracy}% · {level}</span><button type="button" onClick={() => { viewModalRef.current?.close(); setSelectedAssessmentId(assessment.id); }} className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">View result</button></div>
+                                    </div>;
+                                })}</div> : <p className="px-4 py-6 text-sm text-slate-500">No completed reading scripts yet.</p>}
+                        </div>
                     </div>
 
                     <div className="flex justify-end border-t border-slate-200 px-5 py-3">
@@ -981,6 +1050,7 @@ export default function Student() {
                     <button type="submit">close</button>
                 </form>
             </dialog>
+            {selectedAssessmentId !== null && <AssessmentResult assessmentId={selectedAssessmentId} onClose={() => setSelectedAssessmentId(null)} />}
         </div>
     );
 }

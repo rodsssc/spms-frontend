@@ -193,13 +193,26 @@ export default function Login() {
                     </form>
 
 
+                    
                     {/* Footer */}
                     <div className="mt-8 border-t border-slate-200 pt-6 text-center">
+
                         <p className="text-xs text-slate-400">
                             Student access is provided by your school
                             administrator or adviser.
                         </p>
+
+                        <div className="mt-4">
+                            <a
+                                href="/login"
+                                className="text-sm font-semibold text-slate-600 hover:text-emerald-700 hover:underline"
+                            >
+                                Adviser Portal Login →
+                            </a>
+                        </div>
+
                     </div>
+
 
                 </div>
 
