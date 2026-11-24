@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { NavLink } from "react-router-dom";
 
 interface SidebarProps {
@@ -6,28 +5,14 @@ interface SidebarProps {
   setCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-export default function Sidebar({
-  collapsed,
-  setCollapsed,
-}: SidebarProps) {
-  const [assessmentOpen, setAssessmentOpen] = useState(false);
-
+export default function Sidebar({ collapsed, setCollapsed }: SidebarProps) {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `flex items-center rounded-lg text-sm font-medium transition-colors ${
-      collapsed
-        ? "justify-center px-3 py-3"
-        : "gap-3 px-3 py-2.5"
+      collapsed ? "justify-center px-3 py-3" : "gap-3 px-3 py-2.5"
     } ${
       isActive
         ? "bg-emerald-600 text-white"
         : "text-slate-400 hover:bg-emerald-900/60 hover:text-white"
-    }`;
-
-  const subLinkClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-3 rounded-md px-3 py-2 text-xs transition-colors ${
-      isActive
-        ? "bg-emerald-500/10 text-emerald-400"
-        : "text-slate-500 hover:bg-emerald-900/50 hover:text-slate-200"
     }`;
 
   return (
@@ -36,14 +21,10 @@ export default function Sidebar({
         collapsed ? "w-20" : "w-64"
       }`}
     >
-      {/* =====================================================
-          HEADER
-      ====================================================== */}
+      {/* HEADER */}
       <div
         className={`flex h-16 items-center border-b border-emerald-900/60 ${
-          collapsed
-            ? "justify-center px-3"
-            : "justify-between px-5"
+          collapsed ? "justify-center px-3" : "justify-between px-5"
         }`}
       >
         {/* Brand */}
@@ -55,10 +36,7 @@ export default function Sidebar({
           }`}
         >
           <div className="whitespace-nowrap">
-            <h1 className="text-sm font-bold tracking-wide text-white">
-              SPMS
-            </h1>
-
+            <h1 className="text-sm font-bold tracking-wide text-white">SPMS</h1>
             <p className="text-[11px] text-emerald-300/60">
               Student Progress Monitoring
             </p>
@@ -72,20 +50,12 @@ export default function Sidebar({
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-emerald-600 text-white transition-colors hover:bg-emerald-700"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <i
-            className={`fa-solid ${
-              collapsed ? "fa-bars" : "fa-xmark"
-            }`}
-          />
+          <i className={`fa-solid ${collapsed ? "fa-bars" : "fa-xmark"}`} />
         </button>
       </div>
 
-      {/* =====================================================
-          NAVIGATION
-      ====================================================== */}
+      {/* NAVIGATION */}
       <nav className="flex-1 overflow-y-auto px-3 py-5">
-
-        {/* Main */}
         {!collapsed && (
           <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/50">
             Main
@@ -101,7 +71,6 @@ export default function Sidebar({
               className={linkClass}
             >
               <i className="fa-solid fa-chart-line w-4 text-center" />
-
               {!collapsed && <span>Dashboard</span>}
             </NavLink>
           </li>
@@ -114,7 +83,6 @@ export default function Sidebar({
               className={linkClass}
             >
               <i className="fa-solid fa-user-graduate w-4 text-center" />
-
               {!collapsed && <span>Students</span>}
             </NavLink>
           </li>
@@ -127,7 +95,6 @@ export default function Sidebar({
               className={linkClass}
             >
               <i className="fa-solid fa-users-rectangle w-4 text-center" />
-
               {!collapsed && <span>Sections</span>}
             </NavLink>
           </li>
@@ -140,20 +107,11 @@ export default function Sidebar({
               className={linkClass}
             >
               <i className="fa-solid fa-book w-4 text-center" />
-
               {!collapsed && <span>Modules</span>}
             </NavLink>
           </li>
-        </ul>
 
-        {/* =====================================================
-            LEARNING
-        ====================================================== */}
-
-
-          {/* =================================================
-              ASSESSMENTS (module/other assessments, unchanged)
-          ================================================== */}
+          {/* Assessments */}
           <li>
             <NavLink
               to="/adviser/assessment"
@@ -161,11 +119,10 @@ export default function Sidebar({
               className={linkClass}
             >
               <i className="fa-solid fa-clipboard-check w-4 text-center" />
-
               {!collapsed && <span>Assessments</span>}
             </NavLink>
           </li>
-
+        </ul>
       </nav>
     </aside>
   );
