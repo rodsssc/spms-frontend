@@ -1,18 +1,24 @@
 import { useEffect, useState } from "react";
-import { getAssessment, getAssessmentAudio, type AdviserAssessment } from "../../services/adviser/assessment.services";
+import { getAssessment, getAssessmentAudio, reviewAssessment, type AdviserAssessment } from "../../services/adviser/assessment.services";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../@/components/ui/card";
 import RadialProgress from "../../components/radial_progress";
 import { getPerformanceBadgeClass, getPerformanceLevel } from "../../services/adviser/performance";
+import { errorMessage } from "../../services/superadmin/common.services";
 
 interface AssessmentResultProps {
     assessmentId: number;
     onClose: () => void;
+    onAssessmentUpdated?: (assessment: AdviserAssessment) => void;
 }
 
-export default function AssessmentResult({ assessmentId, onClose }: AssessmentResultProps) {
+export default function AssessmentResult({ assessmentId, onClose, onAssessmentUpdated }: AssessmentResultProps) {
     const [assessment, setAssessment] = useState<AdviserAssessment | null>(null);
     const [audioSrc, setAudioSrc] = useState<string | null>(null);
     const [error, setError] = useState("");
+    const [reviewNote, setReviewNote] = useState("");
+    const [reviewRating, setReviewRating] = useState<"fluent" | "developing" | "needs_support" | null>(null);
+    const [savingReview, setSavingReview] = useState(false);
+    const [reviewMessage, setReviewMessage] = useState("");
 
     useEffect(() => {
         let active = true;
@@ -20,7 +26,12 @@ export default function AssessmentResult({ assessmentId, onClose }: AssessmentRe
         setAudioSrc(null);
         setError("");
         getAssessment(String(assessmentId))
-            .then((record) => active && setAssessment(record))
+            .then((record) => {
+                if (!active) return;
+                setAssessment(record);
+                setReviewNote(record.review_note ?? "");
+                setReviewRating(record.fluency_rating);
+            })
             .catch(() => active && setError("Unable to load this result."));
         return () => { active = false; };
     }, [assessmentId]);
@@ -44,6 +55,24 @@ export default function AssessmentResult({ assessmentId, onClose }: AssessmentRe
 
     const submitted = assessment ? new Date(assessment.created_at) : null;
     const performanceLevel = assessment ? getPerformanceLevel(assessment.accuracy) : null;
+
+    const saveReview = async () => {
+        if (!assessment) return;
+        setSavingReview(true);
+        setReviewMessage("");
+        try {
+            const updated = await reviewAssessment(String(assessment.id), reviewRating, reviewNote.trim());
+            setAssessment(updated);
+            setReviewNote(updated.review_note ?? "");
+            setReviewRating(updated.fluency_rating);
+            onAssessmentUpdated?.(updated);
+            setReviewMessage("Adviser fluency review saved. The automatic accuracy score is unchanged.");
+        } catch (error) {
+            setReviewMessage(errorMessage(error));
+        } finally {
+            setSavingReview(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -77,6 +106,15 @@ export default function AssessmentResult({ assessmentId, onClose }: AssessmentRe
                                 </CardContent>
                             </Card>
                             <div className="space-y-4">
+                                <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle>Fluency</CardTitle><CardDescription>Rate the student's reading separately from the automatic accuracy score.</CardDescription></CardHeader><CardContent>
+                                    <div className="flex flex-wrap gap-2">
+                                        {([ ["fluent", "Fluent"], ["developing", "Developing"], ["needs_support", "Needs support"] ] as const).map(([rating, label]) => <button key={rating} type="button" disabled={savingReview} onClick={() => setReviewRating(rating)} aria-pressed={reviewRating === rating} className={`rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-50 ${reviewRating === rating ? "border-emerald-700 bg-emerald-50 text-emerald-800" : "border-slate-300 text-slate-700 hover:bg-slate-50"}`}>{label}</button>)}
+                                    </div>
+                                </CardContent></Card>
+                                <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle>Remarks</CardTitle><CardDescription>Optional notes about the student's reading.</CardDescription></CardHeader><CardContent>
+                                    <textarea aria-label="Assessment remarks" className="textarea textarea-bordered w-full" rows={3} maxLength={2000} value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Add remarks about the student's reading" />
+                                    <div className="mt-3 flex items-center justify-between gap-3"><p role="status" className="text-xs text-slate-500">{reviewMessage || (assessment.reviewed_at ? `Last reviewed ${new Date(assessment.reviewed_at).toLocaleString()}` : "Not saved yet")}</p><button type="button" disabled={savingReview || (!reviewRating && !reviewNote.trim() && !assessment.review_note)} onClick={() => void saveReview()} className="btn btn-sm border-emerald-600 bg-emerald-600 text-white">{savingReview ? "Saving..." : "Save review"}</button></div>
+                                </CardContent></Card>
                                 <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle>Original script</CardTitle></CardHeader><CardContent><p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{assessment.script}</p></CardContent></Card>
                                 <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle>Student assessment result</CardTitle></CardHeader><CardContent><p className="whitespace-pre-wrap text-sm leading-7 text-slate-700">{assessment.transcription}</p></CardContent></Card>
                                 <Card className="border-t-2 border-t-emerald-800 shadow-sm"><CardHeader><CardTitle>Audio recording</CardTitle></CardHeader><CardContent>{audioSrc ? <audio controls src={audioSrc} className="w-full" /> : <p className="text-sm text-slate-500">Audio unavailable.</p>}</CardContent></Card>

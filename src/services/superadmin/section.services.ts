@@ -17,5 +17,8 @@ export const getSections = async (params: SectionFilters) => {
 export const saveSection = async (data: Record<string, string | number | null>, id?: number) =>
     api.request({ method: id ? "put" : "post", url: `/api/superadmin/sections${id ? `/${id}` : ""}`, data });
 
+export const deleteSection = async (sectionId: number) =>
+    api.delete(`/api/superadmin/sections/${sectionId}`);
+
 export const assignAdviser = async (sectionId: number, adviserId: string) =>
     api.put(`/api/superadmin/sections/${sectionId}/adviser`, { adviser_id: adviserId || null });

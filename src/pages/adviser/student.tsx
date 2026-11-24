@@ -10,11 +10,13 @@ import {
     deleteStudent,
 } from "../../services/adviser/student.services";
 import type { Students, Section, StudentFilters } from "../../services/adviser/student.services";
-import { getAssessments } from "../../services/adviser/assessment.services";
+import { getAssessments, reviewAssessment } from "../../services/adviser/assessment.services";
 import { calculateStudentPerformance, getPerformanceBadgeClass, getPerformanceLevel, type StudentPerformance } from "../../services/adviser/performance";
+import { errorMessage, showToast } from "../../services/superadmin/common.services";
 import AssessmentResult from "./assessment_result";
 
 export default function Student() {
+    const canAddStudents = true;
     const canManage = false;
     const addModalRef = useRef<HTMLDialogElement>(null);
     const editModalRef = useRef<HTMLDialogElement>(null);
@@ -40,6 +42,7 @@ export default function Student() {
     const [performanceByStudent, setPerformanceByStudent] = useState<Map<number, StudentPerformance>>(new Map());
     const [performanceLoading, setPerformanceLoading] = useState(true);
     const [performanceError, setPerformanceError] = useState(false);
+    const [savingFluencyAssessmentId, setSavingFluencyAssessmentId] = useState<number | null>(null);
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState<number>(1);
@@ -65,6 +68,25 @@ export default function Student() {
     const [status, setStatus] = useState<"active" | "inactive">("active");
 
     const selectedPerformance = selectedStudent ? performanceByStudent.get(selectedStudent.id) : undefined;
+
+    const saveStudentFluency = async (studentId: number, assessmentId: number, rating: "fluent" | "developing" | "needs_support", remarks: string | null) => {
+        setSavingFluencyAssessmentId(assessmentId);
+        try {
+            const updated = await reviewAssessment(String(assessmentId), rating, remarks ?? "");
+            setPerformanceByStudent((current) => {
+                const performance = current.get(studentId);
+                if (!performance) return current;
+                const records = performance.assessments.map((item) => item.id === updated.id ? { ...item, ...updated } : item);
+                const recalculated = calculateStudentPerformance(records)[0];
+                return recalculated ? new Map(current).set(studentId, recalculated) : current;
+            });
+            await showToast("success", "Fluency rating saved");
+        } catch (error) {
+            await showToast("error", "Unable to save fluency rating", String(errorMessage(error)));
+        } finally {
+            setSavingFluencyAssessmentId(null);
+        }
+    };
 
     useEffect(() => {
         fetchSections();
@@ -407,7 +429,7 @@ export default function Student() {
                             </p>
                         </div>
 
-                        {canManage && <button type="button" onClick={openAddModal} className="btn shrink-0 border-emerald-600 bg-emerald-600 px-3 text-white shadow-sm hover:bg-emerald-700">
+                        {canAddStudents && <button type="button" onClick={openAddModal} className="btn shrink-0 border-emerald-600 bg-emerald-600 px-3 text-white shadow-sm hover:bg-emerald-700">
                             <i className="fa-solid fa-plus"></i><span className="hidden sm:inline">Add Student</span>
                         </button>}
 
@@ -495,6 +517,8 @@ export default function Student() {
                                     <th className="px-4 py-3 font-semibold text-slate-600">Grade</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Section</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Performance</th>
+                                    <th className="px-4 py-3 font-semibold text-slate-600">Fluency</th>
+                                    <th className="px-4 py-3 font-semibold text-slate-600">Remarks</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Address</th>
                                     <th className="px-4 py-3 font-semibold text-slate-600">Status</th>
                                     <th className="w-16 px-4 py-3 text-center font-semibold text-slate-600">Actions</th>
@@ -504,7 +528,7 @@ export default function Student() {
                             <tbody className="divide-y divide-slate-100">
                                 {loading && (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8">
+                                        <td colSpan={10} className="px-4 py-8">
                                             <div className="flex flex-col items-center justify-center gap-2">
                                                 <RadialProgress
                                                     value={fetchProgress}
@@ -520,7 +544,7 @@ export default function Student() {
 
                                 {!loading && !error && students.length === 0 && (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
+                                        <td colSpan={10} className="px-4 py-6 text-center text-slate-400">
                                             No students found.
                                         </td>
                                     </tr>
@@ -546,8 +570,20 @@ export default function Student() {
                                             {student.section.section_name}
                                         </td>
 
-                                        <td className="whitespace-nowrap px-4 py-3">
+                                        <td className="min-w-[18rem] px-4 py-3">
                                             {performanceLoading ? <span className="text-xs text-slate-400">Loading results…</span> : performanceError ? <span className="text-xs text-slate-400">Unavailable</span> : performanceByStudent.has(student.id) ? <><span className="font-semibold text-slate-700">{performanceByStudent.get(student.id)?.averageAccuracy}%</span><span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getPerformanceBadgeClass(performanceByStudent.get(student.id)!.performanceLevel)}`}>{performanceByStudent.get(student.id)?.performanceLevel}</span>{performanceByStudent.get(student.id)?.performanceLevel === "Needs Improvement" && <span className="mt-1 block text-xs font-medium text-rose-700">Follow-up recommended</span>}</> : <span className="text-xs text-slate-400">No results</span>}
+                                        </td>
+
+                                        <td className="min-w-[17rem] px-4 py-3">
+                                            {(() => {
+                                                const latestAssessment = performanceByStudent.get(student.id)?.assessments[0];
+                                                if (!latestAssessment) return <span className="text-xs text-slate-400">No assessment</span>;
+                                                return <div className="flex flex-wrap gap-1.5">{([ ["fluent", "Fluent"], ["developing", "Developing"], ["needs_support", "Needs support"] ] as const).map(([rating, label]) => <button key={rating} type="button" disabled={savingFluencyAssessmentId === latestAssessment.id} aria-pressed={latestAssessment.fluency_rating === rating} onClick={() => void saveStudentFluency(student.id, latestAssessment.id, rating, latestAssessment.review_note)} className={`rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${latestAssessment.fluency_rating === rating ? "border-emerald-600 bg-emerald-50 text-emerald-800" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}>{savingFluencyAssessmentId === latestAssessment.id ? <span className="loading loading-spinner loading-xs" /> : label}</button>)}</div>;
+                                            })()}
+                                        </td>
+
+                                        <td className="min-w-48 max-w-72 whitespace-normal px-4 py-3 text-sm text-slate-600">
+                                            {performanceByStudent.get(student.id)?.reviewRemarks || <span className="text-xs text-slate-400">—</span>}
                                         </td>
 
                                         <td className="px-4 py-3 text-slate-500">
@@ -1050,7 +1086,14 @@ export default function Student() {
                     <button type="submit">close</button>
                 </form>
             </dialog>
-            {selectedAssessmentId !== null && <AssessmentResult assessmentId={selectedAssessmentId} onClose={() => setSelectedAssessmentId(null)} />}
+            {selectedAssessmentId !== null && <AssessmentResult assessmentId={selectedAssessmentId} onClose={() => setSelectedAssessmentId(null)} onAssessmentUpdated={(updated) => setPerformanceByStudent((current) => {
+                const performance = current.get(updated.student_id);
+                if (!performance) return current;
+                const assessments = performance.assessments.map((item) => item.id === updated.id ? { ...item, ...updated } : item);
+                const recalculated = calculateStudentPerformance(assessments)[0];
+                if (!recalculated) return current;
+                return new Map(current).set(updated.student_id, recalculated);
+            })} />}
         </div>
     );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import Swal from "sweetalert2";
 import Loading from "../../components/loading";
 import ListPagination from "../../components/superadmin/listPagination";
 import ManagementModal from "../../components/superadmin/managementModal";
@@ -7,7 +8,7 @@ import PageLoading from "../../components/superadmin/pageLoading";
 import { errorMessage, showToast } from "../../services/superadmin/common.services";
 import type { Adviser, Paginated, Section } from "../../services/superadmin/common.services";
 import { getAdvisers } from "../../services/superadmin/adviser.services";
-import { assignAdviser, getSections, saveSection } from "../../services/superadmin/section.services";
+import { assignAdviser, deleteSection, getSections, saveSection } from "../../services/superadmin/section.services";
 import type { SectionFilters } from "../../services/superadmin/section.services";
 
 const input = "input input-bordered input-sm w-full focus:border-emerald-500 focus:outline-none";
@@ -19,6 +20,7 @@ export default function SuperAdminSections() {
     const [advisers, setAdvisers] = useState<Adviser[]>([]);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
     const [search, setSearch] = useState("");
     const [filters, setFilters] = useState<SectionFilters>({ year_level: "all", status: "all" });
     const [page, setPage] = useState(1);
@@ -65,6 +67,31 @@ export default function SuperAdminSections() {
         catch (error) { await showToast("error", "Assignment failed", String(errorMessage(error))); }
     };
 
+    const removeSection = async (section: Section) => {
+        const confirmation = await Swal.fire({
+            title: "Delete this section?",
+            text: section.students_count > 0
+                ? `This section has ${section.students_count} student(s). They must be moved or removed before the section can be deleted.`
+                : "This action cannot be undone.",
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonText: "Delete section",
+            confirmButtonColor: "#dc2626",
+        });
+        if (!confirmation.isConfirmed) return;
+
+        setDeletingId(section.id);
+        try {
+            await deleteSection(section.id);
+            await load();
+            await showToast("success", "Section deleted");
+        } catch (error) {
+            await showToast("error", "Unable to delete section", String(errorMessage(error)));
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
     const launch = (section: Section | null = null) => { setEditing(section); setOpen(true); };
     const schoolOptions = editing?.school_year && !schoolYears.includes(editing.school_year) ? [editing.school_year, ...schoolYears] : schoolYears;
     const gradeOptions = editing?.year_level && !grades.includes(editing.year_level) ? [editing.year_level, ...grades] : grades;
@@ -79,7 +106,7 @@ export default function SuperAdminSections() {
                 <select className="select select-bordered select-sm" value={perPage} onChange={event => { setPerPage(Number(event.target.value)); setPage(1); }}><option value={10}>10 per page</option><option value={25}>25 per page</option><option value={50}>50 per page</option></select>
                 <button className="btn btn-sm border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700"><i className="fa-solid fa-magnifying-glass"/> Search</button>
             </form>
-            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600"><th className="px-4 py-3">Grade</th><th className="px-4 py-3">Section</th><th className="px-4 py-3">School Year</th><th className="px-4 py-3">Students</th><th className="px-4 py-3">Assigned Adviser</th><th className="px-4 py-3 text-center">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{result?.data.map(section => <tr key={section.id}><td className="px-4 py-3 text-slate-600">{section.year_level}</td><td className="px-4 py-3 font-medium text-slate-700">{section.section_name}</td><td className="px-4 py-3 text-slate-600">{section.school_year}</td><td className="px-4 py-3 text-slate-600">{section.students_count}</td><td className="px-4 py-3"><select className="select select-bordered select-sm" value={section.adviser_id ?? ""} onChange={event => void changeAssignment(section, event.target.value)}><option value="">Unassigned</option>{advisers.map(adviser => <option key={adviser.id} value={adviser.id}>{adviser.name}</option>)}</select></td><td className="px-4 py-3 text-center"><button className="btn btn-ghost btn-sm text-emerald-700" onClick={() => launch(section)}><i className="fa-solid fa-pen"/> Edit</button></td></tr>)}{result?.data.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No sections found.</td></tr>}</tbody></table></div>
+            <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-600"><th className="px-4 py-3">Grade</th><th className="px-4 py-3">Section</th><th className="px-4 py-3">School Year</th><th className="px-4 py-3">Students</th><th className="px-4 py-3">Assigned Adviser</th><th className="px-4 py-3 text-center">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">{result?.data.map(section => <tr key={section.id}><td className="px-4 py-3 text-slate-600">{section.year_level}</td><td className="px-4 py-3 font-medium text-slate-700">{section.section_name}</td><td className="px-4 py-3 text-slate-600">{section.school_year}</td><td className="px-4 py-3 text-slate-600">{section.students_count}</td><td className="px-4 py-3"><select className="select select-bordered select-sm" value={section.adviser_id ?? ""} onChange={event => void changeAssignment(section, event.target.value)}><option value="">Unassigned</option>{advisers.map(adviser => <option key={adviser.id} value={adviser.id}>{adviser.name}</option>)}</select></td><td className="px-4 py-3 text-center"><div className="flex justify-center gap-1"><button className="btn btn-ghost btn-sm text-emerald-700" onClick={() => launch(section)}><i className="fa-solid fa-pen"/> Edit</button><button className="btn btn-ghost btn-sm text-red-600" disabled={deletingId === section.id} onClick={() => void removeSection(section)}>{deletingId === section.id ? <span className="loading loading-spinner loading-xs"/> : <><i className="fa-solid fa-trash"/> Delete</>}</button></div></td></tr>)}{result?.data.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No sections found.</td></tr>}</tbody></table></div>
             {result && <ListPagination page={result.current_page} lastPage={result.last_page} total={result.total} perPage={result.per_page} onChange={setPage}/>}
         </section>}
         <ManagementModal open={open} title={`${editing ? "Edit" : "Add"} Section`} description="Enter section details and assign an adviser." onClose={() => setOpen(false)}>

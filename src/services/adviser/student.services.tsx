@@ -91,8 +91,8 @@ export const getAllStudents = async (filters?: StudentFilters) => {
 }
 
 export const createStudent = async (data: createStudentData) => {
-    const response = await api.post<Students>("/api/adviser/students", data);
-    return response.data;
+    const response = await api.post<{ message: string; student: Students }>("/api/adviser/students", data);
+    return response.data.student;
 }
 
 export const updateStudent = async (id: number, data: UpdateStudentData) => {

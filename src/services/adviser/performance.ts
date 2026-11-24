@@ -35,6 +35,7 @@ export interface StudentPerformance {
     averageAccuracy: number;
     performanceLevel: PerformanceLevel;
     assessmentCount: number;
+    reviewRemarks: string | null;
     assessments: AdviserAssessment[];
 }
 
@@ -69,6 +70,7 @@ export function calculateStudentPerformance(records: AdviserAssessment[]): Stude
             averageAccuracy,
             performanceLevel: getPerformanceLevel(averageAccuracy),
             assessmentCount: assessments.length,
+            reviewRemarks: assessments.find((item) => item.review_note?.trim())?.review_note?.trim() ?? null,
             assessments,
         };
     });

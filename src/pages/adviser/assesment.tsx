@@ -125,7 +125,7 @@ export default function Assessment() {
                                             </button>
                                             {isOpen && <div className="divide-y divide-slate-100 border-t border-slate-100">
                                                 {module.assessments.map((item) => <div key={item.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                                                    <div className="min-w-0"><p className="truncate text-sm font-medium text-slate-700">{item.script_title}</p><p className="mt-0.5 text-xs text-slate-500">{new Date(item.created_at).toLocaleDateString()} · {new Date(item.created_at).toLocaleTimeString()}</p></div>
+                                                    <div className="min-w-0"><p className="truncate text-sm font-medium text-slate-700">{item.script_title}</p><p className="mt-0.5 text-xs text-slate-500">{new Date(item.created_at).toLocaleDateString()} · {new Date(item.created_at).toLocaleTimeString()}</p>{item.fluency_rating ? <p className="mt-1 text-xs font-semibold text-emerald-800">Adviser rating: {item.fluency_rating.replace("_", " ")}</p> : <p className="mt-1 text-xs text-slate-400">Not reviewed</p>}{item.review_note && <p className="mt-1 line-clamp-2 text-xs text-slate-600">Remarks: {item.review_note}</p>}</div>
                                                     <div className="flex items-center justify-between gap-4 sm:justify-end"><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getPerformanceBadgeClass(getPerformanceLevel(item.accuracy))}`}>{item.accuracy}% · {getPerformanceLevel(item.accuracy)}</span><button type="button" onClick={() => setSelectedId(item.id)} className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-50">View result</button></div>
                                                 </div>)}
                                             </div>}
@@ -136,7 +136,7 @@ export default function Assessment() {
                         })}</div>}
                 </div>
             </div>
-            {selectedId !== null && <AssessmentResult assessmentId={selectedId} onClose={() => setSelectedId(null)} />}
+            {selectedId !== null && <AssessmentResult assessmentId={selectedId} onClose={() => setSelectedId(null)} onAssessmentUpdated={(updated) => setAssessments((current) => current.map((item) => item.id === updated.id ? { ...item, ...updated } : item))} />}
         </div>
     );
 }
