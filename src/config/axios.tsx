@@ -2,7 +2,7 @@ import axios from "axios";
 
 const api = axios.create({
     // Keep API and CSRF calls on the frontend origin; Vite proxies them to Laravel.
-    baseURL: import.meta.env.VITE_API_URL || window.location.origin,
+    baseURL: window.location.origin,
     withCredentials: true,
     withXSRFToken: true,
     headers: {
